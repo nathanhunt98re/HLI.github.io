@@ -1,3 +1,4 @@
+const { useState, useEffect } = React;
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle2, LineChart, MapPin, Sparkles, ShieldCheck, Building2, Phone, Mail, Landmark, DollarSign, Users, Handshake, Home } from "lucide-react";
@@ -44,7 +45,7 @@ export default function LuxuryLanding() {
     formspreeEndpoint: "https://formspree.io/f/YOUR_ID",
     // Webhook (Apps Script / Zapier / Make)
     webhookEndpoint: "/api/lead" // replace with your deployed endpoint
-  } as const;
+  } ;
 
   const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
