@@ -7,6 +7,12 @@
 // - No globals, no manual createRoot — the canvas/bundler mounts default export.
 // - Kept/expanded smoke tests (console.assert) to catch regressions.
 
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
 import React, { useEffect, useMemo, useState } from "react";
 
 // ---------- UI primitives ----------
