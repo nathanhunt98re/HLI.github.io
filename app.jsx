@@ -1,213 +1,478 @@
-/*
-  Zero-dependency React Landing Page (UMD/Babel-friendly)
-  - Works on GitHub Pages with index.html loading React, ReactDOM, and Babel Standalone
-  - No imports, no bundler, no Tailwind/shadcn — just lightweight CSS
-  - Includes runtime smoke tests in console
-  - Bootstrap supports React 18 (createRoot) with React 17 fallback (render)
-  - NEW: Safe globals + better bootstrap to avoid build errors when createRoot is missing
-*/
+// Luxury Real Estate & Investment Landing Page — React 18 (v16)
+// Purpose: Eliminate React #130 by ensuring the default export is a
+// valid function component and every rendered element is a valid type.
+// Changes from v15:
+// - Export a component named `App` as the default (some hosts look for App).
+// - Avoid importing `Fragment`; use JSX <>…</> to prevent odd symbol mismatches.
+// - No globals, no manual createRoot — the canvas/bundler mounts default export.
+// - Kept/expanded smoke tests (console.assert) to catch regressions.
 
-// ---------- Safe globals & early diagnostics ----------
-const React = (typeof window !== 'undefined' && window.React) ? window.React : null;
-const ReactDOM = (typeof window !== 'undefined' && window.ReactDOM) ? window.ReactDOM : null;
+import React, { useEffect, useMemo, useState } from "react";
 
-if (!React || !ReactDOM) {
-  (function () {
-    const msgLines = [
-      'React and/or ReactDOM were not found on window.',
-      'Ensure index.html includes:',
-      '  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>',
-      '  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>',
-      '  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
-      'And that this file is loaded with: <script type="text/babel" data-presets="env,react" src="app.jsx"></script>'
-    ].join('\n');
-    const rootEl = document.getElementById('root') || document.body;
-    const pre = document.createElement('pre');
-    pre.textContent = msgLines;
-    pre.style.cssText = 'color:#b91c1c;background:#fff3f3;border:1px solid #fecaca;padding:12px;border-radius:8px;white-space:pre-wrap;';
-    rootEl.appendChild(pre);
-    console.error(msgLines);
-  })();
-  throw new Error('Missing React/ReactDOM globals');
+// ---------- UI primitives ----------
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs backdrop-blur">
+      ✨ {children}
+    </span>
+  );
 }
 
-const { useState, useEffect } = React;
+function Button({
+  variant = "solid",
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "solid" | "outline" }) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm transition disabled:opacity-60 disabled:cursor-not-allowed";
+  const kind =
+    variant === "outline"
+      ? "border border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
+      : "bg-black text-white hover:opacity-90";
+  return <button className={`${base} ${kind} ${className}`} {...props} />;
+}
 
-// --------------------------- Styles ---------------------------
-const GlobalStyles = () => (
-  <style>{`
-    :root{--bg:#fafafa;--fg:#111;--muted:#6b7280;--brand:#111;--accent:#0ea5e9;--card:#ffffff;--border:#e5e7eb}
-    *{box-sizing:border-box} html,body,#root{height:100%}
-    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg)}
-    .container{max-width:1120px;margin:0 auto;padding:0 16px}
-    .nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.8);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--border)}
-    .nav-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0}
-    .brand{display:flex;gap:12px;align-items:center}
-    .logo{height:36px;width:36px;border-radius:12px;background:#000;color:#fff;display:grid;place-items:center;font-weight:700}
-    .nav a{color:inherit;text-decoration:none}
-    .menu{display:none;gap:20px}
-    @media(min-width:768px){.menu{display:flex}}
+function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={`rounded-2xl border border-gray-200 bg-white shadow-sm ${className}`}>
+      <div className="p-5">{children}</div>
+    </div>
+  );
+}
 
-    .btn{display:inline-flex;align-items:center;gap:8px;border-radius:9999px;border:1px solid var(--fg);padding:10px 16px;background:#111;color:#fff;cursor:pointer}
-    .btn:hover{opacity:.9}
-    .btn-outline{background:#fff;color:var(--fg);border-color:var(--border)}
-    .btn:disabled{opacity:.6;cursor:not-allowed}
+function Stat({ value, label }: { value: React.ReactNode; label: React.ReactNode }) {
+  return (
+    <div className="text-center">
+      <div className="text-2xl font-semibold">{value}</div>
+      <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    </div>
+  );
+}
 
-    .grid{display:grid;gap:24px}
-    .grid-2{grid-template-columns:1fr}
-    @media(min-width:900px){.grid-2{grid-template-columns:1fr 1fr}}
-    .grid-3{grid-template-columns:1fr}
-    @media(min-width:900px){.grid-3{grid-template-columns:1fr 1fr 1fr}}
-    .grid-4{grid-template-columns:1fr}
-    @media(min-width:900px){.grid-4{grid-template-columns:1fr 1fr 1fr 1fr}}
+function Section({ id, className = "", children }: { id?: string; className?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className={`py-7 md:py-12 ${className}`}>
+      <div className="container mx-auto max-w-5xl px-4">{children}</div>
+    </section>
+  );
+}
 
-    .hero{padding:48px 0}
-    .title{font-size:clamp(28px,4vw,44px);line-height:1.15;margin:12px 0 0;font-weight:700}
-    .muted{color:var(--muted)}
-    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:16px}
-    .stat .v{font-size:28px;font-weight:600}
-    .stat .l{color:var(--muted);font-size:12px;margin-top:2px}
-
-    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.03)}
-    .card .p{padding:20px}
-    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:9999px;padding:6px 12px;font-size:12px;background:rgba(255,255,255,.7);backdrop-filter:blur(4px)}
-
-    .img-grid{position:relative;border-radius:24px;overflow:hidden;border:1px solid var(--border);aspect-ratio:5/4;background:#f6f6f6}
-    .img-grid-inner{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
-    .img{background-size:cover;background-position:center}
-
-    .section{padding:28px 0}
-    .section-lg{padding:48px 0}
-
-    .list{display:flex;gap:8px;align-items:flex-start}
-    .dot{height:18px;width:18px;border-radius:9999px;background:#111;display:inline-grid;place-items:center;color:#fff;font-size:12px;line-height:1}
-
-    .form{display:grid;gap:14px}
-    @media(min-width:900px){.form{grid-template-columns:1fr 1fr}}
-    .form label{display:block;font-size:12px;margin-bottom:6px;color:#111}
-    .form input,.form textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font:inherit}
-    .form textarea{min-height:110px;grid-column:1/-1}
-    .form-row{display:flex;align-items:center;justify-content:space-between;gap:12px;grid-column:1/-1}
-
-    footer{border-top:1px solid var(--border);margin-top:24px}
-  `}</style>
-);
-
-// --------------------------- UI bits ---------------------------
-const Section = ({ id, children, className = "" }) => (
-  <section id={id} className={`section ${className}`}><div className="container">{children}</div></section>
-);
-
-const Card = ({ children, className = "" }) => (
-  <div className={`card ${className}`}><div className="p">{children}</div></div>
-);
-
-const Stat = ({ value, label }) => (
-  <div className="stat"><div className="v">{value}</div><div className="l">{label}</div></div>
-);
-
-const Pill = ({ children }) => <span className="pill">✨ {children}</span>;
-
-const Button = ({ variant, className = "", children, ...props }) => (
-  <button className={`btn ${variant === 'outline' ? 'btn-outline' : ''} ${className}`} {...props}>{children}</button>
-);
-
-// --------------------------- App ---------------------------
-function LandingPage(){
-  const [form, setForm] = useState({ name:"", email:"", phone:"", interest:"", message:"" });
+// ---------- Lead form ----------
+function LeadForm({ onSubmitted }: { onSubmitted?: () => void }) {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    interest: "",
+    message: "",
+  });
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-
-  const CRM_CONFIG = {
-    mode: "mailto", // 'mailto' | 'formspree' | 'webhook'
-    formspreeEndpoint: "",
-    webhookEndpoint: ""
-  };
-
-  async function submitLead(payload){
-    if(CRM_CONFIG.mode === 'mailto'){
-      const params = new URLSearchParams({
-        subject: `New Inquiry — ${payload.name}`,
-        body: JSON.stringify(payload, null, 2)
-      });
-      window.location.href = `mailto:concierge@huntluxuryinvestments.com?${params.toString()}`;
-      return;
-    }
-    const url = CRM_CONFIG.mode==='formspree'? CRM_CONFIG.formspreeEndpoint : CRM_CONFIG.webhookEndpoint;
-    const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json', 'Accept':'application/json'}, body: JSON.stringify(payload)});
-    if(!res.ok) throw new Error('Submit failed');
+  function onChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
   }
 
-  const onSubmit = async (e) => {
-    e.preventDefault(); setSubmitting(true); setErrorMsg("");
-    try{
-      await submitLead({ ...form, source:'HLI Landing', ts:new Date().toISOString() });
-      setSubmitted(true); setForm({ name:"", email:"", phone:"", interest:"", message:"" });
-    }catch(err){
-      console.error(err); setErrorMsg('Could not submit. Try again or email concierge@huntluxuryinvestments.com.');
-    }finally{ setSubmitting(false); }
-  };
-
-  // ---------------- Tests (component-level smoke) ----------------
-  useEffect(()=>{
-    const formEl = document.querySelector('form[data-testid="lead-form"]');
-    console.group('Component Smoke Tests');
-    console.assert(!!formEl, 'Lead form should exist');
-    if(formEl){
-      const inBtn = formEl.querySelectorAll('button[type="submit"]').length;
-      const outBtn = document.querySelectorAll('#contact button[type="submit"]').length - inBtn;
-      console.assert(inBtn===1, 'Exactly one submit button in form');
-      console.assert(outBtn===0, 'No submit buttons outside form in contact section');
-      const nameReq = document.getElementById('name')?.hasAttribute('required');
-      const emailReq = document.getElementById('email')?.hasAttribute('required');
-      console.assert(!!nameReq && !!emailReq, 'Name and Email are required');
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      // Default: mailto capture. Swap to webhook/CRM when ready.
+      const payload = {
+        ...form,
+        source: "HLI Landing",
+        ts: new Date().toISOString(),
+      };
+      const params = new URLSearchParams({
+        subject: `New Inquiry — ${payload.name || "(no name)"}`,
+        body: JSON.stringify(payload, null, 2),
+      });
+      if (typeof window !== "undefined") {
+        window.location.href = `mailto:concierge@huntluxuryinvestments.com?${params.toString()}`;
+      }
+      onSubmitted?.();
+      setForm({ name: "", email: "", phone: "", interest: "", message: "" });
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Could not submit. Try again or email concierge@huntluxuryinvestments.com.");
+    } finally {
+      setSubmitting(false);
     }
-    console.groupEnd();
-  },[]);
+  }
+
+  // Smoke tests
+  useEffect(() => {
+    try {
+      const formEl = document.querySelector('form[data-testid="lead-form"]');
+      console.group("Component Smoke Tests");
+      console.assert(!!formEl, "Lead form should exist");
+      if (formEl) {
+        const inBtn = formEl.querySelectorAll('button[type="submit"]').length;
+        const outBtn = document.querySelectorAll('#contact button[type="submit"]').length - inBtn;
+        console.assert(inBtn === 1, "Exactly one submit button in form");
+        console.assert(outBtn === 0, "No submit buttons outside form");
+        const nameReq = document.getElementById("name")?.hasAttribute("required");
+        const emailReq = document.getElementById("email")?.hasAttribute("required");
+        console.assert(!!nameReq && !!emailReq, "Name and Email are required");
+      }
+      const ctas = document.querySelectorAll("button");
+      console.assert(ctas.length >= 3, "At least three CTA buttons exist");
+      console.groupEnd();
+    } catch (e) {
+      console.warn("Smoke tests skipped:", e);
+    }
+  }, []);
+
+  return (
+    <form data-testid="lead-form" onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
+      <div>
+        <label htmlFor="name" className="mb-1 block text-xs text-gray-800">Full Name</label>
+        <input id="name" name="name" required value={form.name} onChange={onChange} placeholder="Jane Doe" className="w-full rounded-lg border border-gray-200 px-3 py-2" />
+      </div>
+      <div>
+        <label htmlFor="email" className="mb-1 block text-xs text-gray-800">Email</label>
+        <input id="email" name="email" type="email" required value={form.email} onChange={onChange} placeholder="you@example.com" className="w-full rounded-lg border border-gray-200 px-3 py-2" />
+      </div>
+      <div>
+        <label htmlFor="phone" className="mb-1 block text-xs text-gray-800">Phone</label>
+        <input id="phone" name="phone" value={form.phone} onChange={onChange} placeholder="(202) 555‑0123" className="w-full rounded-lg border border-gray-200 px-3 py-2" />
+      </div>
+      <div>
+        <label htmlFor="interest" className="mb-1 block text-xs text-gray-800">Interest</label>
+        <input id="interest" name="interest" value={form.interest} onChange={onChange} placeholder="Georgetown condo • McLean estate • 1031" className="w-full rounded-lg border border-gray-200 px-3 py-2" />
+      </div>
+      <div className="md:col-span-2">
+        <label htmlFor="message" className="mb-1 block text-xs text-gray-800">Anything else?</label>
+        <textarea id="message" name="message" value={form.message} onChange={onChange} placeholder="Timeline, budget, neighborhoods, goals" className="w-full min-h-[110px] rounded-lg border border-gray-200 px-3 py-2" />
+      </div>
+      <div className="md:col-span-2 flex items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">By submitting, you agree to be contacted about your inquiry.</p>
+        <div className="flex items-center gap-2">
+          {submitting && <span className="text-xs text-gray-500">Submitting…</span>}
+          <Button type="submit" disabled={submitting}>Send My Plan →</Button>
+        </div>
+      </div>
+      {errorMsg && <div className="md:col-span-2 text-sm text-red-600">{errorMsg}</div>}
+    </form>
+  );
+}
+
+// ---------- Page ----------
+export default function App() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const scrollTo = (id: string) => () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+
+  const markets = useMemo(
+    () => [
+      { title: "Virginia", desc: "Northern VA, Arlington, Great Falls, McLean, Alexandria.", tag: "NOVA" },
+      { title: "District of Columbia", desc: "Georgetown, Kalorama, West End, Cathedral Heights.", tag: "DC" },
+      { title: "Maryland", desc: "Bethesda, Chevy Chase, Potomac, Annapolis.", tag: "MD" },
+      { title: "Pennsylvania", desc: "Philadelphia Main Line, Rittenhouse, Chestnut Hill.", tag: "PA" },
+    ],
+    []
+  );
+
+  // Bootstrap smoke tests (page-level)
+  useEffect(() => {
+    try {
+      console.group("Bootstrap Tests");
+      const required = ["services", "coaching", "markets", "insights", "process", "contact"];
+      required.forEach((id) => console.assert(!!document.getElementById(id), `Section #${id} exists`));
+      const h1s = document.querySelectorAll("h1");
+      console.assert(h1s.length >= 1, "At least one <h1> present");
+      console.groupEnd();
+    } catch (e) {
+      console.warn("Bootstrap tests skipped:", e);
+    }
+  }, []);
 
   return (
     <>
-      <GlobalStyles />
-      <div className="nav">
-        <div className="container nav-row">
-          <div className="brand">
-            <div className="logo">H</div>
-            <div>
-              <div style={{fontWeight:600}}>Hunt Luxury Investments</div>
-              <div className="muted" style={{fontSize:12,marginTop:2}}>VA • DC • MD • PA</div>
+      {/* Nav */}
+      <div className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur">
+        <div className="container mx-auto max-w-5xl px-4">
+          <div className="flex items-center justify-between py-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-black text-white font-bold">H</div>
+              <div>
+                <div className="font-semibold">Hunt Luxury Investments</div>
+                <div className="mt-0.5 text-xs text-gray-500">VA • DC • MD • PA</div>
+              </div>
             </div>
+            <nav className="hidden gap-5 md:flex text-sm">
+              <a href="#services">Services</a>
+              <a href="#coaching">Coaching</a>
+              <a href="#markets">Markets</a>
+              <a href="#process">Process</a>
+              <a href="#contact">Contact</a>
+            </nav>
+            <Button onClick={scrollTo("contact")}>Start Your Strategy →</Button>
           </div>
-          <nav className="menu">
-            <a href="#services">Services</a>
-            <a href="#coaching">Coaching</a>
-            <a href="#markets">Markets</a>
-            <a href="#process">Process</a>
-            <a href="#contact">Contact</a>
-          </nav>
-          <Button onClick={()=>document.getElementById('contact').scrollIntoView({behavior:'smooth'})}>Start Your Strategy →</Button>
         </div>
       </div>
 
-      <Section className="hero">
-        <div className="grid grid-2" style={{alignItems:'center'}}>
+      {/* Hero */}
+      <Section className="pt-10">
+        <div className="grid items-center gap-6 md:grid-cols-2">
           <div>
             <Pill>Ultimate Luxury Service • Investment‑Grade Strategy</Pill>
-            <h1 className="title">Find. Negotiate. Own with Intention.</h1>
-            <p className="muted" style={{fontSize:18,marginTop:12}}>
+            <h1 className="mt-3 text-3xl font-bold md:text-4xl">Find. Negotiate. Own with Intention.</h1>
+            <p className="mt-3 text-[17px] text-gray-600">
               We help discerning buyers and investors in VA, DC, MD, and PA acquire luxury properties and build wealth through
               data‑driven strategy, elite negotiation, equipment rentals for show‑ready prep, and one‑on‑one coaching.
             </p>
-            <div style={{display:'flex',gap:12,marginTop:16,flexWrap:'wrap'}}>
-              <Button onClick={()=>document.getElementById('contact').scrollIntoView({behavior:'smooth'})}>Get My Options</Button>
-              <Button variant="outline" onClick={()=>document.getElementById('insights').scrollIntoView({behavior:'smooth'})}>See Market Signals</Button>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button onClick={scrollTo("contact")}>Get My Options</Button>
+              <Button variant="outline" onClick={scrollTo("insights")}>See Market Signals</Button>
             </div>
-            <div className="stats">
-              <Stat value="$250M+" label="Closed & Advised"/>
-              <Stat value="$35k" label="Avg. Negotiation Gain"/>
-              <Stat value="150+" label="Client 5★ Reviews"/>
+            <div className="mt-4 grid grid-cols-3 gap-4">
+              <Stat value="$250M+" label="Closed & Advised" />
+              <Stat value="$35k" label="Avg. Negotiation Gain" />
+              <Stat value="150+" label="Client 5★ Reviews" />
             </div>
-            <div className="muted" style={{display:'flex',gap:12,marginTop:14,fontSize:12}}>
-              <s
+            <div className="mt-3 flex gap-3 text-xs text-gray-500">
+              <span>✔ Fiduciary • Boutique • Discreet</span>
+              <span>✔ By‑referral, high‑touch</span>
+            </div>
+          </div>
+          <div>
+            <div className="relative aspect-[5/4] overflow-hidden rounded-3xl border border-gray-200 bg-gray-50">
+              <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1505691723518-36a5ac3b2b8f?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1493809842364-78817add7ffb?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1501183638710-841dd1904471?q=80&w=1400&auto=format&fit=crop)" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Quick value tiles */}
+      <Section>
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            ["🏙️", "Luxury Resales & New Dev."],
+            ["🏛️", "1031 & Portfolio Strategy"],
+            ["🤝", "Elite Negotiation Coaching"],
+            ["🧰", "Equipment Rental for Prep"],
+          ].map(([icon, text], i) => (
+            <Card key={i}>
+              <div className="flex items-center gap-2">
+                <div className="text-lg">{icon}</div>
+                <div>{text}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* Services */}
+      <Section id="services" className="md:py-12">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <h3 className="text-lg font-semibold">Luxury Home & Estate Search</h3>
+            <p className="mt-1 text-gray-600">Off‑market access, private tours, discreet representation.</p>
+            {[
+              "Curated inventory across VA/DC/MD/PA",
+              "Architectural and lifestyle matching",
+              "Vendor network: staging, lighting, AV, wine rooms",
+            ].map((t, i) => (
+              <div key={i} className="mt-2 flex items-start gap-2">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-black text-[10px] text-white">✓</span>
+                <span>{t}</span>
+              </div>
+            ))}
+            <div className="mt-3"><Button variant="outline" onClick={scrollTo("contact")}>Request Access</Button></div>
+          </Card>
+          <Card>
+            <h3 className="text-lg font-semibold">Investment Strategy & Analysis</h3>
+            <p className="mt-1 text-gray-600">Market‑backed models for ROI, risk, and timing.</p>
+            {[
+              "Hold/Sell/1031 exchange scenarios",
+              "Rent vs. Buy vs. Develop financials",
+              "$ / SqFt, DOM, absorption, cash share trends",
+            ].map((t, i) => (
+              <div key={i} className="mt-2 flex items-start gap-2">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-black text-[10px] text-white">✓</span>
+                <span>{t}</span>
+              </div>
+            ))}
+            <div className="mt-3"><Button variant="outline" onClick={scrollTo("insights")}>See a Sample</Button></div>
+          </Card>
+          <Card>
+            <h3 className="text-lg font-semibold">Negotiation Coaching + Prep Rentals</h3>
+            <p className="mt-1 text-gray-600">Sharpen your edge and present flawlessly.</p>
+            {[
+              "1:1 strategy sessions for offers & counters",
+              "Luxury prep equipment rentals (lighting, decor, open‑house kits)",
+              "Agent‑to‑agent positioning & scripts",
+            ].map((t, i) => (
+              <div key={i} className="mt-2 flex items-start gap-2">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-black text-[10px] text-white">✓</span>
+                <span>{t}</span>
+              </div>
+            ))}
+            <div className="mt-3"><Button variant="outline" onClick={scrollTo("contact")}>Book a Session</Button></div>
+          </Card>
+        </div>
+      </Section>
+
+      {/* Coaching */}
+      <Section id="coaching" className="md:py-12">
+        <div className="grid items-center gap-6 md:grid-cols-2">
+          <div>
+            <h2 className="text-2xl font-bold">Master the Art & Science of the Deal</h2>
+            <p className="mt-2 text-gray-600">From anchoring and concessions to timeline leverage and escalation terms—learn the systems behind winning offers, minimizing risk, and protecting long‑term value in competitive luxury markets.</p>
+            {[
+              "Offer architecture & appraisal buffers",
+              "Counter‑moves, walk‑away points, and scripts",
+              "Vendor readiness to reduce uncertainty and boost price",
+            ].map((t, i) => (
+              <div key={i} className="mt-2 flex items-start gap-2">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-black text-[10px] text-white">✓</span>
+                <span>{t}</span>
+              </div>
+            ))}
+            <div className="mt-3 flex gap-3">
+              <Button onClick={scrollTo("contact")}>Schedule Coaching</Button>
+              <Button variant="outline" onClick={scrollTo("process")}>See Our Process</Button>
+            </div>
+          </div>
+          <div>
+            <div className="relative aspect-[5/4] overflow-hidden rounded-3xl border border-gray-200 bg-gray-50">
+              <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1582401656171-2963caa6d7a4?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1505691723518-36a5ac3b2b8f?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1400&auto=format&fit=crop)" }} />
+                <div className="bg-cover bg-center" style={{ backgroundImage: "url(https://images.unsplash.com/photo-1493809842364-78817add7ffb?q=80&w=1400&auto=format&fit=crop)" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Markets */}
+      <Section id="markets" className="md:py-12">
+        <div className="grid gap-4 md:grid-cols-4">
+          {markets.map((m, i) => (
+            <Card key={i}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">{m.title}</h3>
+                <span className="inline-flex items-center rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs">{m.tag}</span>
+              </div>
+              <p className="mt-1 text-gray-600">{m.desc}</p>
+              <Button variant="outline" className="mt-2 w-full" onClick={scrollTo("contact")}>Explore {m.tag}</Button>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* Insights */}
+      <Section id="insights" className="md:py-12">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { title: "Luxury Inventory Pulse", desc: "Weekly update on new‑to‑market estates, DOM, and price‑improvement velocity." },
+            { title: "Cash vs. Financed Share", desc: "How liquidity shifts negotiation power by sub‑market and price band." },
+            { title: "Rent vs. Hold vs. 1031", desc: "Scenario analysis with cap‑rate bands and tax impact view." },
+          ].map((x, i) => (
+            <Card key={i}>
+              <h3 className="text-lg font-semibold">{x.title}</h3>
+              <p className="mt-1 text-gray-600">{x.desc}</p>
+              <Button variant="outline" className="mt-2 w-full" onClick={scrollTo("contact")}>Request Sample</Button>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* Process */}
+      <Section id="process" className="md:py-12">
+        <div className="grid gap-4 md:grid-cols-4">
+          {[
+            ["📍", "Discover", "Define goals, lifestyle, risk and time horizon."],
+            ["📈", "Model", "Market comps, absorption, and scenario planning."],
+            ["🤝", "Negotiate", "Terms, timing, buffers, and win‑win positioning."],
+            ["🏢", "Close & Grow", "Vendors, leasing, and portfolio optimization."],
+          ].map(([icon, title, desc], i) => (
+            <Card key={i}>
+              <div className="text-2xl">{icon}</div>
+              <h3 className="mt-1 text-lg font-semibold">{title}</h3>
+              <p className="mt-1 text-gray-600">{desc}</p>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* Social proof */}
+      <Section>
+        <Card>
+          <div className="grid items-center gap-6 md:grid-cols-2">
+            <div>
+              <p className="text-[19px] font-semibold leading-snug">“They don’t just show homes—they architect outcomes. Our Great Falls purchase landed under appraised value with seller credits, and their post‑close plan turned it into a cash‑flowing asset within 90 days.”</p>
+              <p className="mt-1 text-gray-500">Private Client • Great Falls, VA</p>
+            </div>
+            <div>
+              <p className="font-semibold">Proof Points</p>
+              <ul className="mt-1 list-disc pl-5 text-gray-600">
+                <li>$47k average net improvement via negotiation</li>
+                <li>12‑day median DOM (luxury band)</li>
+                <li>150+ 5★ client reviews</li>
+              </ul>
+            </div>
+          </div>
+        </Card>
+      </Section>
+
+      {/* Contact */}
+      <Section id="contact" className="md:py-12">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <h3 className="text-lg font-semibold">Get Your Options</h3>
+            <p className="mt-1 text-gray-600">Share a few details and we’ll send a personalized path—listings, off‑market access, investment models, and a clear next step.</p>
+            {!submitted ? (
+              <LeadForm onSubmitted={() => setSubmitted(true)} />
+            ) : (
+              <div className="mt-2">
+                <p className="font-semibold">Thanks—your request is in.</p>
+                <p className="text-gray-600">We’ll follow up shortly with tailored options for you.</p>
+                <div className="mt-2"><Button onClick={() => setSubmitted(false)}>Submit Another</Button></div>
+              </div>
+            )}
+          </Card>
+          <Card>
+            <h3 className="text-lg font-semibold">Concierge Contact</h3>
+            <p className="mt-1 text-gray-600">Discreet, by‑appointment only.</p>
+            <div className="mt-2 flex items-start gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-black text-[11px] text-white">☎</span><span>(703) 555‑0187</span></div>
+            <div className="mt-2 flex items-start gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-black text-[11px] text-white">✉</span><span>concierge@huntluxuryinvestments.com</span></div>
+            <div className="mt-2 flex items-start gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-black text-[11px] text-white">📍</span><span>Tysons • Georgetown • Bethesda • Philadelphia</span></div>
+            <div className="mt-3">
+              <p className="font-semibold">Compliance</p>
+              <ul className="mt-1 list-disc pl-5 text-gray-600">
+                <li>Licensed in VA, DC, MD, PA</li>
+                <li>Long & Foster • Associate Broker (VA)</li>
+                <li>Equal Housing Opportunity</li>
+              </ul>
+            </div>
+          </Card>
+        </div>
+      </Section>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200">
+        <Section className="py-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div>Hunt Luxury Investments — Luxury Real Estate & Investment Advisory</div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <span>© {new Date().getFullYear()} HLI</span>
+              <span>•</span>
+              <a href="#contact" className="hover:underline">Privacy & Disclosures</a>
+            </div>
+          </div>
+        </Section>
+      </footer>
+    </>
+  );
+}
